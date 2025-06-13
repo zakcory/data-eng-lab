@@ -29,7 +29,6 @@ class ActiveLearningPipeline:
         self.node_id_mapping = self._get_node_id_mapping()
         self.feature_vectors = self._read_feature_vectors()
         self.labels = self._read_labels(subject_mapping_path)
-        self.sampling_func = self._sampling()
         # TODO: Add (if needed) additional fields and functions to the constructor.
         # TODO: Complete the implementation of the run_pipeline method (note: it should be called externally,
         #  not from within the constructor).
@@ -84,6 +83,9 @@ class ActiveLearningPipeline:
             accuracy_scores.append(accuracy)
             print(f'Accuracy: {accuracy}')
             print('----------------------------------------')
+            new_selected = self._update_params(trained_model)
+            print(f'Selected {len(new_selected)} new samples')
+            print('----------------------------------------')
         return accuracy_scores
 
     def _train_model(self):
@@ -103,27 +105,38 @@ class ActiveLearningPipeline:
         np.random.seed(self.seed)
         return np.random.choice(list(range(len(self.available_pool_indices))), self.budget_per_iter, replace=False)
 
-    def _custom_sampling(self):
+    def _custom_sampling(self, trained_model):
         """
         Custom sampling method to be implemented
         :return:
         new_selected_samples: numpy array, new selected samples
         """
-        # todo: implement custom sampling
-        pass
+        pool_nids = np.array(self.available_pool_indices)
+        pool_idx = [self.node_id_mapping[nid] for nid in pool_nids]
+        X_pool = self.feature_vectors[pool_idx]
+        # predicted probabilities for each class
+        probs = trained_model.predict_proba(X_pool)
+        # uncertainty = 1 - max predicted class probability
+        uncertainties = 1 - np.max(probs, axis=1)
+        # pick top-k most uncertain
+        selected_pos = np.argsort(-uncertainties)[:self.budget_per_iter]
+        return list(pool_nids[selected_pos])
 
-    def _sampling(self):
+    def _sampling(self, trained_model):
         """
         Sampling wrapper
         :return:
         
         """
         if self.selection_criterion == 'custom':
-            return self._custom_sampling
+            new_selected = self._custom_sampling(trained_model)
         elif self.selection_criterion == 'random':
-            return self._random_sampling
+            pos = self._random_sampling()
+            new_selected = list(np.array(self.available_pool_indices)[pos])
         else:
             raise ValueError("Unknown selection criterion")
+        
+        return new_selected
 
     def _update_train_indices(self, new_selected_samples):
         """
@@ -137,12 +150,14 @@ class ActiveLearningPipeline:
         """
         self.available_pool_indices = np.setdiff1d(self.available_pool_indices, new_selected_samples)
 
-    def _update_params(self, new_selected_samples):
+    def _update_params(self, trained_model):
         """
         Update the pool and train indices
         """
+        new_selected_samples = self._sampling(trained_model)
         self._update_available_pool_indices(new_selected_samples)
         self._update_train_indices(new_selected_samples)
+        return new_selected_samples
 
     def _evaluate_model(self, trained_model):
         """
@@ -158,7 +173,7 @@ class ActiveLearningPipeline:
         return round(np.mean(preds == self.labels[test_indices]), 3)
 
 
-def generate_plot(accuracy_scores_dict):
+def generate_plot(accuracy_scores_dict, num):
     num_iters = len(accuracy_scores_dict['random'])
     for criterion, accuracy_scores in accuracy_scores_dict.items():
         x_vals = list(range(1, len(accuracy_scores) + 1))
@@ -168,7 +183,9 @@ def generate_plot(accuracy_scores_dict):
     plt.xlim(1, num_iters)
     plt.xticks(range(1, num_iters + 1))
     plt.legend()
-    plt.show()
+    plt.savefig(f'active_learning_accuracy_{num}.png')
+    plt.close()
+    # plt.show()
 
 
 if __name__ == '__main__':
@@ -178,10 +195,6 @@ if __name__ == '__main__':
     parser.add_argument('--budget_per_iter', type=int, default=30)
     parser.add_argument('--nodes_df_path', type=str, default='nodes.csv')
     parser.add_argument('--subject_mapping_path', type=str, default='subject_mapping.pkl')
-
-    # TODO: delete this later
-    nodes_df = pd.read_csv('nodes.csv')
-    print(nodes_df.head)
 
     hp = parser.parse_args()
     with open(hp.indices_dict_path, 'rb') as f:
@@ -193,7 +206,7 @@ if __name__ == '__main__':
     selection_criteria = ['custom', 'random']
     accuracy_scores_dict = defaultdict(list)
 
-    for seed in range(1, 4):
+    for i, seed in enumerate(range(1, 4)):
         print(f"seed {seed}")
         for criterion in selection_criteria:
             AL_class = ActiveLearningPipeline(seed=seed,
@@ -205,13 +218,7 @@ if __name__ == '__main__':
                                               budget_per_iter=hp.budget_per_iter,
                                               nodes_df_path=hp.nodes_df_path,
                                               subject_mapping_path=hp.subject_mapping_path)
-
-            # TODO: delete this later
-            # print(f"nodes_df: {AL_class.nodes_df}")
-            # print(f"node_id_mapping: {AL_class.node_id_mapping}")
-            # print(f"feature_vectors: {AL_class.feature_vectors}")
-            # print(f"labels: {AL_class.labels}")
             
             accuracy_scores_dict[criterion] = AL_class.run_pipeline()
-        generate_plot(accuracy_scores_dict)
+        generate_plot(accuracy_scores_dict, i)
         print(f"======= Finished iteration for seed {seed} =======")
