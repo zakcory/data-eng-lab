@@ -29,6 +29,7 @@ class ActiveLearningPipeline:
         self.node_id_mapping = self._get_node_id_mapping()
         self.feature_vectors = self._read_feature_vectors()
         self.labels = self._read_labels(subject_mapping_path)
+        self.sampling_func = self._sampling()
         # TODO: Add (if needed) additional fields and functions to the constructor.
         # TODO: Complete the implementation of the run_pipeline method (note: it should be called externally,
         #  not from within the constructor).
@@ -72,9 +73,6 @@ class ActiveLearningPipeline:
         """
         Run the active learning pipeline
         """
-        # TODO: Implement the active learning pipeline
-        # TODO: Do not change the lines that are already implemented here in this method, only add your own code lines
-        #  before and after them.
         accuracy_scores = []
         for iteration in range(self.iterations):
             if len(self.train_indices) > 600:
@@ -114,6 +112,19 @@ class ActiveLearningPipeline:
         # todo: implement custom sampling
         pass
 
+    def _sampling(self):
+        """
+        Sampling wrapper
+        :return:
+        
+        """
+        if self.selection_criterion == 'custom':
+            return self._custom_sampling
+        elif self.selection_criterion == 'random':
+            return self._random_sampling
+        else:
+            raise ValueError("Unknown selection criterion")
+
     def _update_train_indices(self, new_selected_samples):
         """
         Update the train indices
@@ -125,6 +136,13 @@ class ActiveLearningPipeline:
         Update the available pool indices
         """
         self.available_pool_indices = np.setdiff1d(self.available_pool_indices, new_selected_samples)
+
+    def _update_params(self, new_selected_samples):
+        """
+        Update the pool and train indices
+        """
+        self._update_available_pool_indices(new_selected_samples)
+        self._update_train_indices(new_selected_samples)
 
     def _evaluate_model(self, trained_model):
         """
@@ -161,6 +179,10 @@ if __name__ == '__main__':
     parser.add_argument('--nodes_df_path', type=str, default='nodes.csv')
     parser.add_argument('--subject_mapping_path', type=str, default='subject_mapping.pkl')
 
+    # TODO: delete this later
+    nodes_df = pd.read_csv('nodes.csv')
+    print(nodes_df.head)
+
     hp = parser.parse_args()
     with open(hp.indices_dict_path, 'rb') as f:
         indices_dict = pickle.load(f)
@@ -183,6 +205,13 @@ if __name__ == '__main__':
                                               budget_per_iter=hp.budget_per_iter,
                                               nodes_df_path=hp.nodes_df_path,
                                               subject_mapping_path=hp.subject_mapping_path)
+
+            # TODO: delete this later
+            # print(f"nodes_df: {AL_class.nodes_df}")
+            # print(f"node_id_mapping: {AL_class.node_id_mapping}")
+            # print(f"feature_vectors: {AL_class.feature_vectors}")
+            # print(f"labels: {AL_class.labels}")
+            
             accuracy_scores_dict[criterion] = AL_class.run_pipeline()
         generate_plot(accuracy_scores_dict)
         print(f"======= Finished iteration for seed {seed} =======")
