@@ -83,9 +83,7 @@ class ActiveLearningPipeline:
             accuracy_scores.append(accuracy)
             print(f'Accuracy: {accuracy}')
             print('----------------------------------------')
-            new_selected = self._update_params(trained_model)
-            print(f'Selected {len(new_selected)} new samples')
-            print('----------------------------------------')
+            self._update_params(trained_model)
         return accuracy_scores
 
     def _train_model(self):
@@ -119,23 +117,22 @@ class ActiveLearningPipeline:
         # uncertainty = 1 - max predicted class probability
         uncertainties = 1 - np.max(probs, axis=1)
         # pick top-k most uncertain
-        selected_pos = np.argsort(-uncertainties)[:self.budget_per_iter]
-        return list(pool_nids[selected_pos])
+        selected_pos = np.argpartition(-uncertainties, self.budget_per_iter)[:self.budget_per_iter]
+        return selected_pos
 
     def _sampling(self, trained_model):
         """
         Sampling wrapper
         :return:
-        
+        new_selected: list, newly selected samples
         """
         if self.selection_criterion == 'custom':
-            new_selected = self._custom_sampling(trained_model)
+            pos = self._custom_sampling(trained_model)
         elif self.selection_criterion == 'random':
             pos = self._random_sampling()
-            new_selected = list(np.array(self.available_pool_indices)[pos])
         else:
             raise ValueError("Unknown selection criterion")
-        
+        new_selected = np.array(self.available_pool_indices)[pos]
         return new_selected
 
     def _update_train_indices(self, new_selected_samples):
@@ -150,14 +147,13 @@ class ActiveLearningPipeline:
         """
         self.available_pool_indices = np.setdiff1d(self.available_pool_indices, new_selected_samples)
 
-    def _update_params(self, trained_model):
+    def _update_step(self, trained_model):
         """
         Update the pool and train indices
         """
         new_selected_samples = self._sampling(trained_model)
         self._update_available_pool_indices(new_selected_samples)
         self._update_train_indices(new_selected_samples)
-        return new_selected_samples
 
     def _evaluate_model(self, trained_model):
         """
@@ -183,9 +179,7 @@ def generate_plot(accuracy_scores_dict, num):
     plt.xlim(1, num_iters)
     plt.xticks(range(1, num_iters + 1))
     plt.legend()
-    plt.savefig(f'active_learning_accuracy_{num}.png')
-    plt.close()
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -220,5 +214,5 @@ if __name__ == '__main__':
                                               subject_mapping_path=hp.subject_mapping_path)
             
             accuracy_scores_dict[criterion] = AL_class.run_pipeline()
-        generate_plot(accuracy_scores_dict, i)
+        generate_plot(accuracy_scores_dict, seed)
         print(f"======= Finished iteration for seed {seed} =======")
