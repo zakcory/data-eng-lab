@@ -169,7 +169,7 @@ class ActiveLearningPipeline:
         return round(np.mean(preds == self.labels[test_indices]), 3)
 
 
-def generate_plot(accuracy_scores_dict, num):
+def generate_plot(accuracy_scores_dict):
     num_iters = len(accuracy_scores_dict['random'])
     for criterion, accuracy_scores in accuracy_scores_dict.items():
         x_vals = list(range(1, len(accuracy_scores) + 1))
@@ -214,5 +214,5 @@ if __name__ == '__main__':
                                               subject_mapping_path=hp.subject_mapping_path)
             
             accuracy_scores_dict[criterion] = AL_class.run_pipeline()
-        generate_plot(accuracy_scores_dict, seed)
+        generate_plot(accuracy_scores_dict)
         print(f"======= Finished iteration for seed {seed} =======")
